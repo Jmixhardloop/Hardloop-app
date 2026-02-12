@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Elite Run Tracker Pro</title>
+    <link rel="apple-touch-icon" href="https://static.nike.com/a/images/f_auto,cs_srgb/w_960,c_limit/4e4ea44c-71e5-4458-ac3c-4c790423928a/hoe-hardlopers-de-weg-vrijmaakten-voor-de-nike-vomero%C2%A018.jpg">
+   
+    <style>
+        :root { --primary: #00ff88; --bg: #121212; --card: #1e1e1e; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: white; padding: 15px; display: flex; flex-direction: column; align-items: center; margin: 0; }
+        .card { background: var(--card); padding: 20px; border-radius: 15px; width: 100%; max-width: 450px; margin-bottom: 20px; border: 1px solid #333; box-sizing: border-box; }
+       
+        .interval-block { background: #2a2a2a; padding: 15px; border-radius: 12px; margin-bottom: 12px; border-left: 5px solid var(--primary); }
+        .picker-container { background: #1a1a1a; border-radius: 10px; display: flex; justify-content: space-around; padding: 10px 0; margin: 10px 0; height: 60px; align-items: center; overflow: hidden; }
+        .scroll-picker { height: 60px; overflow-y: scroll; scroll-snap-type: y mandatory; width: 40%; scrollbar-width: none; }
+        .scroll-picker div { height: 60px; line-height: 60px; scroll-snap-align: center; font-size: 2rem; font-weight: bold; color: var(--primary); text-align: center; }
+
+        .btn { width: 100%; padding: 15px; border: none; border-radius: 10px; cursor: pointer; font-weight: bold; margin-bottom: 10px; }
+        .btn-start { background: var(--primary); color: #000; }
+        .btn-free { background: #00aaff; color: #fff; }
+        .btn-add { background: #333; color: var(--primary); border: 1px solid var(--primary); flex: 1; }
+        .btn-remove { background: #333; color: #ff4444; border: 1px solid #ff4444; flex: 1; }
+       
+        .delete-link { color: #ff4444; font-size: 0.85rem; text-decoration: underline; background: none; border: none; cursor: pointer; margin-top: 10px; display: block; }
+
+        .calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
+        .day { padding: 10px 0; text-align: center; border-radius: 8px; background: #2a2a2a; cursor: pointer; }
+        .day.has-run { border: 2px solid var(--primary); font-weight: bold; color: var(--primary); }
+
+        #detailModal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 2000; align-items: center; justify-content: center; }
+        .modal-content { background: var(--card); width: 85%; max-width: 350px; padding: 25px; border-radius: 20px; position: relative; border: 1px solid #444; max-height: 80vh; overflow-y: auto; }
+        .session-item { border-bottom: 1px solid #333; padding: 15px 0; text-align: left; }
+        .session-item:last-child { border-bottom: none; }
+       
+        #phaseIndicator { font-weight: bold; padding: 5px 15px; border-radius: 20px; margin-bottom: 10px; display: inline-block; font-size: 0.9rem; }
+        .phase-run { background: var(--primary); color: black; }
+        .phase-rest { background: #00aaff; color: white; }
+    </style>
+</head>
+<body>
+
+    <div id="setupCard" class="card">
+        <h2 style="margin:0 0 15px 0">🏃 Training Setup</h2>
+        <button class="btn btn-free" onclick="startTraining(true)">⚡ SNELSTART</button>
+        <div id="intervalList"></div>
+        <div style="display:flex; gap:10px; margin-bottom:15px;">
+            <button class="btn btn-add" onclick="addInterval()">➕ Blok</button>
+            <button class="btn btn-remove" onclick="removeLastInterval()">➖ Wis</button>
+        </div>
+        <button class="btn btn-start" onclick="startTraining(false)">START INTERVAL ▶️</button>
+    </div>
+
+    <div id="activeCard" class="card" style="display:none; text-align:center;">
+        <div id="phaseIndicator" style="display:none;">RUN</div>
+        <div id="mainTimer" style="font-size: 5.5rem; font-family: monospace; color: #ffd700; line-height: 1;">00:00</div>
+       
+        <div style="display:flex; flex-direction: column; align-items: center; margin: 15px 0; gap: 10px;">
+            <div><small>AFSTAND</small><br><span id="totalDist" style="font-size:1.8rem; color:var(--primary)">0.00</span> km</div>
+            <div style="display:flex; width: 100%; justify-content: space-around; border-top: 1px solid #333; padding-top: 15px;">
+                <div><small>TOTAAL TIJD</small><br><span id="totalTimer" style="font-size:1.2rem; color:#fff">00:00</span></div>
+                <div><small>TEMPO</small><br><span id="livePace" style="font-size:1.2rem; color:#00aaff">--:--</span></div>
+                <div><small>SNELHEID</small><br><span id="liveSpeed" style="font-size:1.2rem; color:var(--primary)">0.0</span></div>
+            </div>
+        </div>
+        <button class="btn" style="background:#ff4444; color:white" onclick="stopTraining()">STOP SESSIE</button>
+    </div>
+
+    <div class="card">
+        <div class="calendar-header">
+            <button onclick="changeMonth(-1)" style="background:none; border:none; color:white; font-size:1.5rem">◀</button>
+            <h3 id="calendarMonth" style="margin:0">Maand</h3>
+            <button onclick="changeMonth(1)" style="background:none; border:none; color:white; font-size:1.5rem">▶</button>
+        </div>
+        <div class="calendar-grid" id="calendarGrid"></div>
+    </div>
+
+    <div id="detailModal" onclick="this.style.display='none'">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <h2 id="modalDate" style="color:var(--primary); margin:0 0 15px 0; font-size: 1.2rem;"></h2>
+            <div id="modalStats"></div>
+            <button class="btn" style="background:#333; color:white; margin-top:15px;" onclick="document.getElementById('detailModal').style.display='none'">SLUITEN</button>
+        </div>
+    </div>
+
+    <script>
+        let intervalCount = 0, currentMonth = new Date(), logs = JSON.parse(localStorage.getItem('runLogs')) || {};
+        let watchID, startTime, timerInterval, totalDistance = 0, lastPos = null, isFreeRun = true;
+        let intervals = [], currentIntervalIdx = 0, isRunningPhase = true, phaseStartTime, intervalStats = [];
+        let runDistStart = 0;
+       
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function initAudio() { const b = audioCtx.createBuffer(1, 1, 22050); const s = audioCtx.createBufferSource(); s.buffer = b; s.connect(audioCtx.destination); s.start(0); }
+        function beep(f=440, d=200) {
+            const o=audioCtx.createOscillator(), g=audioCtx.createGain();
+            o.connect(g); g.connect(audioCtx.destination);
+            o.frequency.value=f;
+            g.gain.setValueAtTime(0.2, audioCtx.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + d/1000);
+            o.start(); o.stop(audioCtx.currentTime+d/1000);
+        }
+
+        window.onload = () => { addInterval(); renderCalendar(); };
+
+        function addInterval() {
+            intervalCount++;
+            const div = document.createElement('div');
+            div.className = 'interval-block';
+            div.id = `block-${intervalCount}`;
+            div.innerHTML = `<strong>Blok ${intervalCount}</strong><div class="picker-container">${createPicker('rm')}${createPicker('rs')}</div>
+                             <small>Rust</small><div class="picker-container">${createPicker('bm')}${createPicker('bs')}</div>`;
+            document.getElementById('intervalList').appendChild(div);
+        }
+        function createPicker(c){ let h=''; for(let i=0;i<60;i++) h+=`<div>${i<10?'0'+i:i}</div>`; return `<div class="scroll-picker ${c}">${h}</div>`; }
+        function removeLastInterval(){ if(intervalCount>1) document.getElementById(`block-${intervalCount--}`).remove(); }
+
+        function startTraining(free) {
+            isFreeRun = free;
+            if(!free) {
+                intervals = [];
+                for(let i=1; i<=intervalCount; i++){
+                    const b = document.getElementById(`block-${i}`);
+                    intervals.push({
+                        run: Math.round(b.querySelector('.rm').scrollTop/60)*60 + Math.round(b.querySelector('.rs').scrollTop/60),
+                        rest: Math.round(b.querySelector('.bm').scrollTop/60)*60 + Math.round(b.querySelector('.bs').scrollTop/60)
+                    });
+                }
+                currentIntervalIdx = 0; isRunningPhase = true;
+                document.getElementById('phaseIndicator').style.display = 'inline-block';
+                updatePhaseUI();
+            }
+            if(audioCtx.state==='suspended') audioCtx.resume();
+            initAudio();
+            startTime = Date.now(); phaseStartTime = Date.now(); runDistStart = 0;
+            document.getElementById('setupCard').style.display='none';
+            document.getElementById('activeCard').style.display='block';
+            watchID = navigator.geolocation.watchPosition(uGPS, null, {enableHighAccuracy:true});
+            timerInterval = setInterval(tick, 1000);
+            beep(660, 400);
+        }
+
+        function updatePhaseUI() {
+            const el = document.getElementById('phaseIndicator');
+            el.innerText = isRunningPhase ? `RUN (Blok ${currentIntervalIdx + 1})` : `RUST`;
+            el.className = isRunningPhase ? 'phase-run' : 'phase-rest';
+        }
+
+        function formatTime(totalSeconds) {
+            const m = Math.floor(Math.abs(totalSeconds)/60);
+            const s = Math.abs(totalSeconds)%60;
+            return `${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+        }
+
+        function tick() {
+            const now = Date.now();
+            const totalSec = Math.floor((now - startTime)/1000);
+            document.getElementById('totalTimer').innerText = formatTime(totalSec);
+            if(isFreeRun) {
+                document.getElementById('mainTimer').innerText = formatTime(totalSec);
+            } else {
+                const phaseSecElapsed = Math.floor((now - phaseStartTime)/1000);
+                const target = isRunningPhase ? intervals[currentIntervalIdx].run : intervals[currentIntervalIdx].rest;
+                const remaining = target - phaseSecElapsed;
+                document.getElementById('mainTimer').innerText = formatTime(remaining >= 0 ? remaining : 0);
+               
+                if(remaining <= 3 && remaining > 0) beep(440, 150);
+
+                if(phaseSecElapsed >= target) {
+                    if(isRunningPhase) {
+                        const distInRun = totalDistance - runDistStart;
+                        const pace = distInRun > 0.01 ? calculatePace(target, distInRun) : "--:--";
+                        intervalStats.push({ blok: currentIntervalIdx+1, pace: pace });
+                        isRunningPhase = false;
+                    } else {
+                        currentIntervalIdx++;
+                        if(currentIntervalIdx >= intervals.length) return stopTraining();
+                        isRunningPhase = true;
+                        runDistStart = totalDistance;
+                    }
+                    phaseStartTime = now;
+                    beep(880, 600);
+                    updatePhaseUI();
+                }
+            }
+        }
+
+        function calculatePace(seconds, km) {
+            if(km <= 0) return "--:--";
+            const paceMin = (seconds / 60) / km;
+            const m = Math.floor(paceMin), s = Math.round((paceMin - m) * 60);
+            return `${m}:${s.toString().padStart(2,'0')}`;
+        }
+
+        function uGPS(p) {
+            const {latitude:la, longitude:lo, speed:sp} = p.coords;
+            const kmh = sp ? sp * 3.6 : 0;
+            document.getElementById('liveSpeed').innerText = kmh.toFixed(1);
+            document.getElementById('livePace').innerText = kmh > 0.5 ? calculatePace(3600/kmh, 1) : "--:--";
+            if(lastPos) totalDistance += getDist(lastPos.la, lastPos.lo, la, lo);
+            document.getElementById('totalDist').innerText = totalDistance.toFixed(2);
+            lastPos = {la, lo};
+        }
+
+        function stopTraining() {
+            clearInterval(timerInterval); if(watchID) navigator.geolocation.clearWatch(watchID);
+            const d = new Date(), key = `${d.getFullYear()}-${(d.getMonth()+1).toString().padStart(2,'0')}-${d.getDate().toString().padStart(2,'0')}`;
+            const totalSec = Math.floor((Date.now() - startTime)/1000);
+            let avgPace = (isFreeRun && totalDistance > 0.05) ? calculatePace(totalSec, totalDistance) : "--:--";
+            if(!logs[key]) logs[key] = [];
+            logs[key].push({ id: Date.now(), type: isFreeRun ? 'Snelstart' : 'Interval', dist: totalDistance.toFixed(2), time: formatTime(totalSec), avgPace: avgPace, intervalStats: [...intervalStats] });
+            localStorage.setItem('runLogs', JSON.stringify(logs));
+            location.reload();
+        }
+
+        function renderCalendar() {
+            const grid = document.getElementById('calendarGrid'); grid.innerHTML = '';
+            const y = currentMonth.getFullYear(), m = currentMonth.getMonth();
+            document.getElementById('calendarMonth').innerText = new Intl.DateTimeFormat('nl-NL', {month:'long', year:'numeric'}).format(currentMonth);
+            const first = (new Date(y, m, 1).getDay() || 7) - 1, days = new Date(y, m+1, 0).getDate();
+            for(let i=0; i<first; i++) grid.innerHTML += `<div></div>`;
+            for(let d=1; d<=days; d++){
+                const k = `${y}-${(m+1).toString().padStart(2,'0')}-${d.toString().padStart(2,'0')}`;
+                const hasRun = Array.isArray(logs[k]) && logs[k].length > 0;
+                grid.innerHTML += `<div class="day ${hasRun ? 'has-run' : ''}" onclick="showDetail('${k}')">${d}</div>`;
+            }
+        }
+
+        function showDetail(k) {
+            const sessionData = logs[k];
+            if(!sessionData) return;
+            const sessions = Array.isArray(sessionData) ? sessionData : [sessionData];
+            let html = '';
+            sessions.forEach((s) => {
+                let statsHtml = "";
+                if(s.type === 'Snelstart' || !s.type) {
+                    statsHtml = `Gem tempo: ${s.avgPace || '--:--'} min/km`;
+                } else if(s.intervalStats) {
+                    statsHtml = s.intervalStats.map(i => `Blok ${i.blok}: ${i.pace} min/km`).join('<br>');
+                }
+                html += `<div class="session-item"><strong>${s.type || 'Sessie'}</strong> (${s.time})<br>🏁 ${s.dist} km<br><small>${statsHtml}</small><br><button class="delete-link" onclick="deleteSession('${k}', ${s.id})">Verwijder sessie</button></div>`;
+            });
+            document.getElementById('modalStats').innerHTML = html;
+            document.getElementById('modalDate').innerText = k;
+            document.getElementById('detailModal').style.display = 'flex';
+        }
+
+        function deleteSession(k, id) {
+            if(confirm("Deze sessie definitief verwijderen?")){
+                if(Array.isArray(logs[k])) {
+                    logs[k] = logs[k].filter(s => s.id !== id);
+                    if(logs[k].length === 0) delete logs[k];
+                } else { delete logs[k]; }
+                localStorage.setItem('runLogs', JSON.stringify(logs));
+                location.reload();
+            }
+        }
+        function getDist(la1,lo1,la2,lo2) { const R=6371, dLa=(la2-la1)*Math.PI/180, dLo=(lo2-lo1)*Math.PI/180; const a=Math.sin(dLa/2)**2+Math.cos(la1*Math.PI/180)*Math.cos(la2*Math.PI/180)*Math.sin(dLo/2)**2; return R*2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); }
+        function changeMonth(d){ currentMonth.setMonth(currentMonth.getMonth()+d); renderCalendar(); }
+    </script>
+</body>
+</html>
